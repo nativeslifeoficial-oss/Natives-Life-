@@ -1,0 +1,625 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Natives Life</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101a17;color:#fff;font-family:Arial;overflow:hidden;touch-action:none}
+header{height:54px;background:#172b23;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #42634c}
+header strong{color:#a7d89a;font-size:19px}
+header small{color:#a6b9ac}
+#game{display:block;width:100%;height:calc(100dvh - 54px);touch-action:none}
+#controls{position:fixed;bottom:22px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:end;pointer-events:none}
+#stick{width:126px;height:126px;border-radius:50%;background:#ffffff24;border:2px solid #ffffff65;position:relative;pointer-events:auto;touch-action:none}
+#knob{width:48px;height:48px;border-radius:50%;position:absolute;left:37px;top:37px;background:#d2e8b6;border:2px solid #fff}
+.actions{display:grid;grid-template-columns:58px 58px;gap:10px;pointer-events:auto}
+.actions button{height:58px;border-radius:50%;border:1px solid #d9f0bf;background:#254f38;color:white;font-size:12px;font-weight:bold;touch-action:none}
+#attack{background:#783b2d!important;border-color:#e9b2a2!important}
+#message{position:fixed;top:68px;left:50%;transform:translateX(-50%);background:#14261ee8;border:1px solid #618363;padding:9px 13px;border-radius:10px;font-size:13px;white-space:nowrap}
+
+#nl-menu {
+  position:fixed; inset:54px 0 0; z-index:20;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px; overflow:auto;
+  background:linear-gradient(#10251deF,#08140ff5);
+}
+.nl-panel {
+  width:100%; max-width:390px; text-align:center;
+  padding:24px 18px; border:1px solid #52785a;
+  border-radius:20px; background:#172b23;
+}
+.nl-panel h1 {color:#a7d89a; margin:0 0 8px}
+.nl-panel p {color:#c0d0c3; line-height:1.5}
+.nl-option {
+  display:block; width:100%; margin-top:12px; padding:16px;
+  border:1px solid #64876a; border-radius:12px;
+  background:#244b34; color:white; font-size:16px;
+  font-weight:bold;
+}
+.nl-option:active {background:#397b43}
+#nl-status {min-height:38px;font-size:13px;color:#d9e9c9}
+\n
+#open-sheet{background:#244b34;color:#fff;border:1px solid #64876a;border-radius:9px;padding:8px 10px;font-weight:bold}
+#rpg-sheet{display:none;position:fixed;z-index:30;inset:54px 0 0;overflow:auto;background:#08140ff5;padding:14px}
+.rpg-card{max-width:540px;margin:0 auto 30px;background:#172b23;border:1px solid #52785a;border-radius:16px;padding:16px}
+.rpg-card h2,.rpg-card h3{color:#a7d89a}
+.rpg-close,.rpg-action{background:#244b34;color:white;border:1px solid #64876a;border-radius:9px;padding:10px;margin:3px}
+.rpg-line{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid #34513e}
+.rpg-line small{color:#c0d0c3}
+.rpg-line button{background:#244b34;color:white;border:1px solid #64876a;border-radius:7px;padding:7px 11px}
+.rpg-note{font-size:12px;color:#c0d0c3;line-height:1.5}
+
+</style>
+</head>
+<body>
+<header><strong>NATIVES LIFE</strong><small>PROTÓTIPO 0.2</small><button id="open-sheet">PERSONAGEM</button></header>
+<canvas id="game"></canvas>
+<div id="message">Explore a floresta 🌿</div>
+<div id="controls">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="actions">
+    <button id="interact">INTERAGIR</button>
+<button id="attack">ATACAR</button>
+    <button id="run">CORRER</button>
+  </div>
+</div>
+
+
+<div id="rpg-sheet"><div class="rpg-card"><button class="rpg-close" id="close-sheet">← Voltar ao jogo</button><h2>Ficha do personagem</h2><p>Desenvolvimento individual · Natives Life</p><h3>Atributos</h3><div id="rpg-attributes"></div><h3>Perícias</h3><div id="rpg-skills"></div><h3>Desenvolvimento</h3><p>Pontos de Desenvolvimento: <strong id="rpg-points">0</strong> PD</p><button class="rpg-action" id="rpg-award">Registrar marco de aventura (+2 PD)</button><p class="rpg-note">Protótipo: o Mestre registra os marcos da aventura. Atributos custam 6 PD por +1; perícias custam 3 PD por +1. Perícias limitadas a +5. Atributos limitados provisoriamente a +3. O progresso fica salvo neste navegador.</p></div></div>
+<div id="nl-menu">
+ <div class="nl-panel">
+  <h1>NATIVES LIFE</h1>
+  <p>Sua história começa aqui.</p>
+  <button class="nl-option" data-mode="solo">🌿 JORNADA SOLO</button>
+  <button class="nl-option" data-mode="public">🌎 MUNDO PÚBLICO</button>
+  <button class="nl-option" data-mode="private">👥 SALAS PRIVADAS</button>
+  <p id="nl-status">Escolha como deseja jogar.</p>
+ </div>
+</div>
+\n<script>
+const canvas=document.querySelector("#game");
+const ctx=canvas.getContext("2d");
+const msg=document.querySelector("#message");
+let W=0,H=0;
+function resize(){
+  const d=Math.min(devicePixelRatio||1,2);
+  W=innerWidth;H=innerHeight-54;
+  canvas.width=W*d;canvas.height=H*d;
+  canvas.style.width=W+"px";canvas.style.height=H+"px";
+  ctx.setTransform(d,0,0,d,0,0);
+}
+addEventListener("resize",resize);resize();
+
+// Mundo em coordenadas isométricas.
+const tileW=48,tileH=24;
+const world={cols:60,rows:60};
+const player={x:30,y:30,r:0.25,speed:3.1};
+let camera={x:30,y:30};
+let joy={x:0,y:0};
+let running=false;
+const obstacles=[];
+let seed=1843;
+function rand(){
+  seed=(seed*1664525+1013904223)>>>0;
+  return seed/4294967296;
+}
+const trees=[];
+for(let i=0;i<240;i++){
+  const x=rand()*world.cols,y=rand()*world.rows;
+  if(Math.hypot(x-30,y-30)>3)
+    trees.push({x,y,size:0.75+rand()*0.55});
+}
+const rocks=[];
+for(let i=0;i<65;i++)
+  rocks.push({x:rand()*world.cols,y:rand()*world.rows});
+
+
+// NATIVES LIFE v0.3 — combate
+const enemies = [];
+let combatXP = 0;
+try {
+  combatXP = Math.max(0, Number(
+    localStorage.getItem("nativesCombatXP")
+  ) || 0);
+} catch(e) {}
+let combatLevel = 1 + Math.floor(combatXP / 50);
+
+for (let i = 0; i < 12; i++) {
+  for (let tries = 0; tries < 300; tries++) {
+    const x = 3 + rand() * (world.cols - 6);
+    const y = 3 + rand() * (world.rows - 6);
+    if (Math.hypot(x-player.x, y-player.y) < 8) continue;
+    if (trees.some(t => Math.hypot(t.x-x,t.y-y) < 1.3)) continue;
+    if (enemies.some(e => Math.hypot(e.x-x,e.y-y) < 4)) continue;
+    enemies.push({x,y,hp:60,maxHp:60,alive:true,respawnAt:0});
+    break;
+  }
+}
+
+function drawEnemies() {
+  for (const e of enemies) {
+    if (!e.alive ||
+        Math.abs(e.x-player.x)>22 ||
+        Math.abs(e.y-player.y)>22) continue;
+    const p = project(e.x,e.y);
+    ctx.fillStyle="#251a18";
+    ctx.beginPath();
+    ctx.ellipse(p.x,p.y,11,5,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle="#8c493b";
+    ctx.fillRect(p.x-8,p.y-19,16,17);
+    ctx.fillStyle="#d6a18b";
+    ctx.beginPath();
+    ctx.arc(p.x,p.y-23,7,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle="#271d1b";
+    ctx.fillRect(p.x-14,p.y-35,28,5);
+    ctx.fillStyle="#d74d42";
+    ctx.fillRect(p.x-13,p.y-34,26*(e.hp/e.maxHp),3);
+    ctx.fillStyle="#fff1dc";
+    ctx.font="10px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("Criatura",p.x,p.y-39);
+  }
+  ctx.textAlign="start";
+}
+
+function attackEnemy() {
+  let target=null, best=Infinity;
+  for (const e of enemies) {
+    if (!e.alive) continue;
+    const d=Math.hypot(e.x-player.x,e.y-player.y);
+    if (d<best) {best=d;target=e;}
+  }
+  if (!target || best>2.4) {
+    msg.textContent="Aproxime-se de uma criatura para atacar!";
+    return;
+  }
+  target.hp=Math.max(0,target.hp-25);
+  if (target.hp===0) {
+    target.alive=false;
+    target.respawnAt=performance.now()+10000;
+    combatXP+=15;
+    combatLevel=1+Math.floor(combatXP/50);
+    try {
+      localStorage.setItem("nativesCombatXP",String(combatXP));
+    } catch(e) {}
+    msg.textContent="Criatura derrotada! +15 XP. XP: "+
+      combatXP+" · Nível "+combatLevel;
+  } else {
+    msg.textContent="Acerto! Vida: "+target.hp+"/"+target.maxHp;
+  }
+}
+
+function project(x,y){
+  return {
+    x:W/2+(x-camera.x-y+camera.y)*tileW/2,
+    y:H/2+(x-camera.x+y-camera.y)*tileH/2
+  };
+}
+function diamond(x,y,color){
+  const p=project(x,y);
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y-tileH/2);
+  ctx.lineTo(p.x+tileW/2,p.y);
+  ctx.lineTo(p.x,p.y+tileH/2);
+  ctx.lineTo(p.x-tileW/2,p.y);
+  ctx.closePath();ctx.fill();
+}
+function tree(t){
+  const p=project(t.x,t.y);
+  const s=t.size;
+  ctx.fillStyle="#62472c";
+  ctx.fillRect(p.x-4*s,p.y-24*s,8*s,27*s);
+  ctx.fillStyle="#285c39";
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y-66*s);
+  ctx.lineTo(p.x-21*s,p.y-28*s);
+  ctx.lineTo(p.x+21*s,p.y-28*s);
+  ctx.closePath();ctx.fill();
+  ctx.fillStyle="#397b43";
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y-53*s);
+  ctx.lineTo(p.x-18*s,p.y-19*s);
+  ctx.lineTo(p.x+18*s,p.y-19*s);
+  ctx.closePath();ctx.fill();
+}
+function drawPlayer(){
+  const p=project(player.x,player.y);
+  ctx.fillStyle="#15281c";
+  ctx.beginPath();ctx.ellipse(p.x,p.y,10,5,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#b98250";
+  ctx.beginPath();ctx.arc(p.x,p.y-19,7,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#39774a";
+  ctx.fillRect(p.x-8,p.y-14,16,18);
+  ctx.fillStyle="#d9c28b";
+  ctx.fillRect(p.x-7,p.y+3,5,9);
+  ctx.fillRect(p.x+2,p.y+3,5,9);
+  ctx.fillStyle="#fff";
+  ctx.fillRect(p.x-3,p.y-21,2,2);
+  ctx.fillRect(p.x+3,p.y-21,2,2);
+}
+function blocked(x,y){
+  if(x<1||y<1||x>world.cols-1||y>world.rows-1)return true;
+  return trees.some(t=>Math.hypot(t.x-x,t.y-y)<0.62);
+}
+function move(dx,dy){
+  const nx=player.x+dx,ny=player.y+dy;
+  if(!blocked(nx,player.y))player.x=nx;
+  if(!blocked(player.x,ny))player.y=ny;
+}
+function render(){
+  ctx.fillStyle="#193e2a";ctx.fillRect(0,0,W,H);
+  const cx=player.x,cy=player.y;
+  const range=22;
+  for(let x=Math.floor(cx-range);x<cx+range;x++){
+    for(let y=Math.floor(cy-range);y<cy+range;y++){
+      if(x<0||y<0||x>=world.cols||y>=world.rows)continue;
+      const n=(x*13+y*7)%9;
+      diamond(x,y,n===0?"#315e39":n===1?"#356640":"#2d6338");
+    }
+  }
+  // Pequenos trechos de água decorativos.
+  for(let i=0;i<8;i++){
+    const x=16+i*0.8,y=35+i*0.25;
+    if(Math.hypot(x-player.x,y-player.y)<23)
+      diamond(x,y,"#397b8a");
+  }
+  const objects=[
+    ...trees.map(t=>({...t,type:"tree"})),
+    ...rocks.map(r=>({...r,type:"rock"}))
+  ].filter(o=>Math.abs(o.x-player.x)<22&&Math.abs(o.y-player.y)<22);
+  objects.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
+  for(const o of objects){
+    const p=project(o.x,o.y);
+    if(o.type==="tree")tree(o);
+    else{
+      ctx.fillStyle="#858d7b";
+      ctx.beginPath();
+      ctx.ellipse(p.x,p.y-4,7,5,0,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+  drawEnemies();
+  drawRemotePlayers();
+  drawPlayer();
+  ctx.fillStyle="#e4f2d5";
+  ctx.font="12px Arial";
+  ctx.fillText("X: "+Math.floor(player.x)+"  Y: "+Math.floor(player.y),12,H-12);
+  requestAnimationFrame(render);
+}
+let last=performance.now();
+function update(now){
+  const dt=Math.min((now-last)/1000,0.04);last=now;
+  const length=Math.hypot(joy.x,joy.y)||1;
+  if(Math.abs(joy.x)+Math.abs(joy.y)>0.05){
+    const speed=player.speed*(running?1.7:1);
+    // Movimento convertido para os eixos do mundo isométrico.
+    const dx=(joy.x+joy.y)*speed*dt/Math.sqrt(2);
+    const dy=(joy.y-joy.x)*speed*dt/Math.sqrt(2);
+    move(dx,dy);
+  }
+  for (const e of enemies) {
+    if (!e.alive && performance.now() >= e.respawnAt) {
+      e.hp=e.maxHp; e.alive=true;
+    }
+  }
+  camera.x+=(player.x-camera.x)*0.12;
+  camera.y+=(player.y-camera.y)*0.12;
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(render);
+requestAnimationFrame(update);
+
+const stick=document.querySelector("#stick");
+const knob=document.querySelector("#knob");
+let pointer=null;
+function setJoy(e){
+  const r=stick.getBoundingClientRect();
+  let x=e.clientX-(r.left+r.width/2);
+  let y=e.clientY-(r.top+r.height/2);
+  const max=39,dist=Math.hypot(x,y);
+  if(dist>max){x=x/dist*max;y=y/dist*max;}
+  joy.x=x/max;joy.y=y/max;
+  knob.style.left=(39+x)+"px";
+  knob.style.top=(39+y)+"px";
+}
+stick.addEventListener("pointerdown",e=>{
+  pointer=e.pointerId;stick.setPointerCapture(pointer);setJoy(e);
+});
+stick.addEventListener("pointermove",e=>{
+  if(e.pointerId===pointer)setJoy(e);
+});
+function release(){
+  pointer=null;joy={x:0,y:0};
+  knob.style.left="37px";knob.style.top="37px";
+}
+stick.addEventListener("pointerup",release);
+stick.addEventListener("pointercancel",release);
+document.querySelector("#run").addEventListener("pointerdown",()=>{
+  running=true;
+});
+document.querySelector("#run").addEventListener("pointerup",()=>running=false);
+document.querySelector("#run").addEventListener("pointercancel",()=>running=false);
+document.querySelector("#attack").addEventListener("click",attackEnemy);
+document.querySelector("#interact").addEventListener("click",()=>{
+  const nearby=trees.some(t=>Math.hypot(t.x-player.x,t.y-player.y)<1.7);
+  const rock=rocks.some(r=>Math.hypot(r.x-player.x,r.y-player.y)<1.7);
+  msg.textContent=nearby?"Você encontrou uma árvore da floresta! 🌳":
+    rock?"Você encontrou uma pedra. 🪨":"Você está explorando a mata. 🌿";
+});
+addEventListener("keydown",e=>{
+  const keys={ArrowUp:[0,-1],ArrowDown:[0,1],
+    ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+  if(keys[e.key]){
+    joy.x=keys[e.key][0];joy.y=keys[e.key][1];
+  }
+});
+addEventListener("keyup",()=>{joy={x:0,y:0};});
+
+document.querySelectorAll(".nl-option").forEach(button => {
+  button.addEventListener("click", () => {
+    const mode = button.dataset.mode;
+    const status = document.querySelector("#nl-status");
+
+    if (mode === "solo") {
+      document.querySelector("#nl-menu").style.display = "none";
+      msg.textContent = "Jornada solo: explore a floresta!";
+      return;
+    }
+
+    if (mode === "public") {
+      status.textContent =
+        "Mundo público: precisamos configurar o servidor online.";
+    } else {
+      status.textContent =
+        "Salas privadas: o sistema de salas e códigos será implementado na próxima etapa.";
+    }
+  });
+});
+
+
+/* NATIVES_RPG_V1 — sistema de evolução experimental */
+(()=>{
+ const attrs={FOR:'Força',AGI:'Agilidade',INT:'Intelecto',PER:'Percepção',PRE:'Presença',VON:'Vontade'};
+ const skills=[['Atletismo','FOR'],['Luta','FOR'],['Acrobacia','AGI'],['Furtividade','AGI'],['Pontaria','AGI'],['Investigação','INT'],['Medicina','INT'],['História','INT'],['Percepção','PER'],['Sobrevivência','PER'],['Persuasão','PRE'],['Intimidação','PRE'],['Enganação','PRE'],['Resistência','VON'],['Concentração','VON']];
+ const key='nativesLifeRPG_v1';
+ let state={pd:0,attrs:{},skills:{}};
+ try{const old=JSON.parse(localStorage.getItem(key)||'null');if(old&&old.attrs&&old.skills)state={...state,...old};}catch(e){}
+ Object.keys(attrs).forEach(k=>{if(!Number.isFinite(state.attrs[k]))state.attrs[k]=0});
+ skills.forEach(([n])=>{if(!Number.isFinite(state.skills[n]))state.skills[n]=0});
+ const $=id=>document.getElementById(id);
+ function save(){try{localStorage.setItem(key,JSON.stringify(state))}catch(e){};render()}
+ function render(){
+  $('rpg-points').textContent=state.pd;
+  $('rpg-attributes').innerHTML=Object.entries(attrs).map(([k,n])=>`<div class="rpg-line"><span>${n} <small>(${k})</small></span><span><strong>${state.attrs[k]>=0?'+':''}${state.attrs[k]}</strong> <button data-attr="${k}" ${state.attrs[k]>=3||state.pd<6?'disabled':''}>+1 · 6 PD</button></span></div>`).join('');
+  $('rpg-skills').innerHTML=skills.map(([n,a])=>`<div class="rpg-line"><span>${n}<br><small>${attrs[a]} · ${state.skills[n]>=0?'+':''}${state.skills[n]}</small></span><button data-skill="${n}" ${state.skills[n]>=5||state.pd<3?'disabled':''}>Melhorar · 3 PD</button></div>`).join('');
+ }
+ $('open-sheet').addEventListener('click',()=>{$('rpg-sheet').style.display='block';render()});
+ $('close-sheet').addEventListener('click',()=>{$('rpg-sheet').style.display='none'});
+ $('rpg-award').addEventListener('click',()=>{state.pd+=2;save();$('message').textContent='Marco registrado: +2 PD! 🌱'});
+ $('rpg-sheet').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.attr){const k=b.dataset.attr;if(state.pd>=6&&state.attrs[k]<3){state.pd-=6;state.attrs[k]++;save()}}else if(b.dataset.skill){const k=b.dataset.skill;if(state.pd>=3&&state.skills[k]<5){state.pd-=3;state.skills[k]++;save()}}});
+ render();
+})();
+</script>
+
+<script>
+/* NATIVES_CLASSES_V2 */
+document.addEventListener("DOMContentLoaded", function () {
+  const menu = document.querySelector("#nl-menu");
+  if (!menu) {
+    console.error("Menu principal não encontrado.");
+    return;
+  }
+
+  const classes = {
+    guerreiro: ["Guerreiro",
+      ["Postura de Combate — melhora uma ação defensiva.",
+       "Golpe Poderoso — aumenta o dano de um ataque.",
+       "Protetor — ajuda a defender um aliado."]],
+    cacador: ["Caçador",
+      ["Rastreador — ajuda a identificar rastros.",
+       "Mira Precisa — melhora um ataque à distância.",
+       "Conhecedor da Fauna — reconhece sinais de animais."]],
+    batedor: ["Batedor",
+      ["Passos Silenciosos — favorece a furtividade.",
+       "Olhos Atentos — ajuda a perceber perigos.",
+       "Caminho Seguro — ajuda a encontrar rotas."]],
+    curandeiro: ["Curandeiro",
+      ["Primeiros Socorros — melhora o atendimento a feridos.",
+       "Conhecimento das Plantas — ajuda a identificar plantas.",
+       "Recuperação Assistida — favorece a recuperação de um aliado."]],
+    xama: ["Xamã",
+      ["Leitura dos Sinais — ajuda a interpretar pistas.",
+       "Concentração — favorece testes de Vontade.",
+       "Sensibilidade Espiritual — percebe fenômenos sobrenaturais fictícios."]],
+    domador: ["Domador de Feras",
+      ["Vínculo Animal — facilita interações com animais.",
+       "Comando Companheiro — orienta um companheiro animal.",
+       "Instinto Compartilhado — ajuda a perceber sinais do companheiro."]]
+  };
+
+  const screen = document.createElement("div");
+  screen.id = "nl-class-screen";
+  screen.style.cssText =
+    "position:fixed;inset:0;z-index:9999;overflow:auto;background:#10251d;color:#fff;padding:20px;font-family:Arial,sans-serif";
+  screen.innerHTML = `
+    <div style="max-width:600px;margin:auto">
+      <h1>CRIAÇÃO DE PERSONAGEM</h1>
+      <p>Escolha sua classe. A primeira habilidade começa desbloqueada; as outras duas serão liberadas durante a evolução.</p>
+      <div id="nl-class-options" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px"></div>
+      <div id="nl-class-info" style="margin-top:16px;line-height:1.7"></div>
+      <button id="nl-class-confirm" style="padding:12px;margin-top:16px;background:#c9a84c;color:#142016;border:0;border-radius:8px;font-weight:bold;width:100%">CONFIRMAR CLASSE</button>
+      <p style="font-size:12px">A distribuição dos atributos será mantida separada desta etapa.</p>
+    </div>`;
+  document.body.appendChild(screen);
+
+  let chosen = "";
+  const options = screen.querySelector("#nl-class-options");
+  const info = screen.querySelector("#nl-class-info");
+
+  Object.entries(classes).forEach(([id, cls]) => {
+    const button = document.createElement("button");
+    button.textContent = cls[0];
+    button.style.cssText =
+      "padding:14px 5px;background:#203d2d;color:white;border:1px solid #8ba58c;border-radius:8px";
+    button.onclick = () => {
+      chosen = id;
+      options.querySelectorAll("button").forEach(b => {
+        b.style.outline = b === button ? "3px solid #c9a84c" : "none";
+      });
+      info.innerHTML = "<h2>" + cls[0] + "</h2>" +
+        cls[1].map((h, i) =>
+          "<p>" + (i === 0 ? "🔓 " : "🔒 ") +
+          "<b>Habilidade " + (i + 1) + ":</b> " + h +
+          (i ? " (futura)" : " (inicial)") + "</p>"
+        ).join("");
+    };
+    options.appendChild(button);
+  });
+
+  screen.querySelector("#nl-class-confirm").onclick = () => {
+    if (!chosen) {
+      info.textContent = "Escolha uma classe antes de confirmar.";
+      return;
+    }
+    const cls = classes[chosen];
+    const saved = {
+      id: chosen,
+      nome: cls[0],
+      habilidadeDesbloqueada: 1,
+      habilidadesDesbloqueadas: [0]
+    };
+    localStorage.setItem("nativesLifeClass_v1", JSON.stringify(saved));
+    try {
+      const k = "nativesLifeRPG_v1";
+      const d = JSON.parse(localStorage.getItem(k) || "{}");
+      d.characterClass = chosen;
+      d.characterClassName = cls[0];
+      d.unlockedClassSkills = [0];
+      localStorage.setItem(k, JSON.stringify(d));
+    } catch(e) {}
+    screen.remove();
+    menu.style.display = "";
+    menu.scrollIntoView({behavior:"smooth", block:"center"});
+  };
+});
+</script>
+
+
+<script>
+/* NATIVES LIFE v0.4 — multiplayer local */
+const nlRemotePlayers = new Map();
+let nlSocket = null;
+let nlOwnId = null;
+let nlMoveTimer = null;
+
+function drawRemotePlayers() {
+  for (const [id, other] of nlRemotePlayers) {
+    if (id === nlOwnId) continue;
+    const p = project(other.x, other.y);
+
+    ctx.fillStyle = "#15281c";
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, 10, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#d5a45b";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - 19, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#477fc0";
+    ctx.fillRect(p.x - 8, p.y - 14, 16, 18);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "11px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(String(other.name || "Jogador").slice(0, 18),
+                 p.x, p.y - 32);
+  }
+  ctx.textAlign = "start";
+}
+
+function nlConnect() {
+  if (nlSocket &&
+      (nlSocket.readyState === WebSocket.OPEN ||
+       nlSocket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+
+  const status = document.querySelector("#nl-status");
+  if (status) status.textContent = "Conectando ao servidor local...";
+
+  try {
+    nlSocket = new WebSocket("ws://127.0.0.1:18765");
+  } catch (e) {
+    if (status) status.textContent = "Não foi possível iniciar a conexão.";
+    return;
+  }
+
+  nlSocket.onopen = () => {
+    if (status) status.textContent = "Multiplayer conectado! 🌐";
+    document.querySelector("#nl-menu").style.display = "none";
+
+    nlMoveTimer = setInterval(() => {
+      if (nlSocket && nlSocket.readyState === WebSocket.OPEN) {
+        nlSocket.send(JSON.stringify({
+          type: "move", x: player.x, y: player.y
+        }));
+      }
+    }, 150);
+  };
+
+  nlSocket.onmessage = (event) => {
+    let data;
+    try { data = JSON.parse(event.data); } catch (e) { return; }
+
+    if (data.type === "welcome") {
+      nlOwnId = data.id;
+      nlRemotePlayers.clear();
+      for (const other of data.players || []) {
+        nlRemotePlayers.set(other.id, other);
+      }
+    } else if (data.type === "join") {
+      if (data.player) nlRemotePlayers.set(data.player.id, data.player);
+    } else if (data.type === "state") {
+      nlRemotePlayers.clear();
+      for (const other of data.players || []) {
+        nlRemotePlayers.set(other.id, other);
+      }
+    } else if (data.type === "leave") {
+      nlRemotePlayers.delete(data.id);
+    }
+  };
+
+  nlSocket.onerror = () => {
+    if (status) status.textContent =
+      "Falha na conexão. Confira se server.py está rodando.";
+  };
+
+  nlSocket.onclose = () => {
+    if (nlMoveTimer) clearInterval(nlMoveTimer);
+    nlMoveTimer = null;
+    nlRemotePlayers.clear();
+    if (status) status.textContent = "Multiplayer desconectado.";
+  };
+}
+
+document.querySelectorAll(".nl-option").forEach(button => {
+  button.addEventListener("click", () => {
+    if (button.dataset.mode === "public" ||
+        button.dataset.mode === "private") {
+      nlConnect();
+    }
+  });
+});
+</script>
+
+</body>
+</html>
+
